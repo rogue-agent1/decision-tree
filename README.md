@@ -1,11 +1,13 @@
-# decision-tree
+# Decision Tree
 
-Decision tree classifier from scratch
+Decision tree classifier (ID3/CART).
 
 ## Usage
 
 ```bash
-python3 decision_tree.py --help
+python3 decision_tree.py
 ```
 
-Zero dependencies. Python 3.8+.
+## License
+
+MIT
