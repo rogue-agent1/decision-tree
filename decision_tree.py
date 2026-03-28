@@ -1,68 +1,79 @@
 #!/usr/bin/env python3
-"""Decision tree classifier from scratch."""
-import sys, math, json, csv
-from collections import Counter
+"""decision_tree - Decision tree classifier."""
+import argparse, math, sys, json
 
 def entropy(labels):
-    n = len(labels); counts = Counter(labels)
-    return -sum((c/n)*math.log2(c/n) for c in counts.values() if c)
+    n = len(labels)
+    if n == 0: return 0
+    counts = {}
+    for l in labels: counts[l] = counts.get(l, 0) + 1
+    return -sum((c/n)*math.log2(c/n) for c in counts.values() if c > 0)
 
-def info_gain(data, labels, feature_idx):
-    parent_ent = entropy(labels)
-    values = set(row[feature_idx] for row in data)
-    child_ent = 0
-    for v in values:
-        subset = [labels[i] for i, row in enumerate(data) if row[feature_idx] == v]
-        child_ent += len(subset)/len(labels) * entropy(subset)
-    return parent_ent - child_ent
+def info_gain(data, labels, feat_idx, threshold):
+    left_l, right_l = [], []
+    for i, row in enumerate(data):
+        if row[feat_idx] <= threshold: left_l.append(labels[i])
+        else: right_l.append(labels[i])
+    n = len(labels)
+    if not left_l or not right_l: return 0
+    return entropy(labels) - (len(left_l)/n)*entropy(left_l) - (len(right_l)/n)*entropy(right_l)
 
-class Node:
-    def __init__(self, feature=None, value=None, label=None, children=None):
-        self.feature = feature; self.value = value
-        self.label = label; self.children = children or {}
+def best_split(data, labels):
+    best_gain, best_feat, best_thresh = 0, 0, 0
+    for f in range(len(data[0])):
+        vals = sorted(set(row[f] for row in data))
+        for i in range(len(vals)-1):
+            thresh = (vals[i]+vals[i+1])/2
+            gain = info_gain(data, labels, f, thresh)
+            if gain > best_gain: best_gain, best_feat, best_thresh = gain, f, thresh
+    return best_feat, best_thresh, best_gain
 
-def build_tree(data, labels, features, depth=0, max_depth=10):
-    if len(set(labels)) == 1: return Node(label=labels[0])
-    if not features or depth >= max_depth: return Node(label=Counter(labels).most_common(1)[0][0])
-    gains = [(info_gain(data, labels, f), f) for f in features]
-    best_gain, best_feat = max(gains)
-    if best_gain <= 0: return Node(label=Counter(labels).most_common(1)[0][0])
-    node = Node(feature=best_feat)
-    values = set(row[best_feat] for row in data)
-    remaining = [f for f in features if f != best_feat]
-    for v in values:
-        subset_idx = [i for i, row in enumerate(data) if row[best_feat] == v]
-        sub_data = [data[i] for i in subset_idx]
-        sub_labels = [labels[i] for i in subset_idx]
-        node.children[v] = build_tree(sub_data, sub_labels, remaining, depth+1, max_depth)
-    return node
+def build_tree(data, labels, depth=0, max_depth=10):
+    if len(set(labels)) == 1: return {"leaf": labels[0]}
+    if depth >= max_depth or len(data) < 2:
+        counts = {}
+        for l in labels: counts[l] = counts.get(l,0)+1
+        return {"leaf": max(counts, key=counts.get)}
+    feat, thresh, gain = best_split(data, labels)
+    if gain == 0:
+        counts = {}
+        for l in labels: counts[l] = counts.get(l,0)+1
+        return {"leaf": max(counts, key=counts.get)}
+    left_d, left_l, right_d, right_l = [], [], [], []
+    for i, row in enumerate(data):
+        if row[feat] <= thresh: left_d.append(row); left_l.append(labels[i])
+        else: right_d.append(row); right_l.append(labels[i])
+    return {"feat":feat,"thresh":thresh,
+            "left":build_tree(left_d,left_l,depth+1,max_depth),
+            "right":build_tree(right_d,right_l,depth+1,max_depth)}
 
-def predict(node, sample):
-    if node.label is not None: return node.label
-    val = sample[node.feature]
-    if val in node.children: return predict(node.children[val], sample)
-    return node.label or 'unknown'
+def predict(tree, row):
+    if "leaf" in tree: return tree["leaf"]
+    if row[tree["feat"]] <= tree["thresh"]: return predict(tree["left"], row)
+    return predict(tree["right"], row)
 
-def print_tree(node, indent=0, names=None):
-    if node.label is not None: print(' '*indent + f'→ {node.label}'); return
-    fname = names[node.feature] if names else f'feature[{node.feature}]'
-    for v, child in sorted(node.children.items(), key=str):
-        print(' '*indent + f'{fname} = {v}:')
-        print_tree(child, indent+2, names)
+def print_tree(tree, indent=0):
+    if "leaf" in tree: print(" "*indent + f"-> {tree['leaf']}"); return
+    print(" "*indent + f"feat[{tree['feat']}] <= {tree['thresh']:.2f}?")
+    print_tree(tree["left"], indent+2)
+    print_tree(tree["right"], indent+2)
 
-if __name__ == '__main__':
-    if '--demo' in sys.argv:
-        # Classic: play tennis?
-        data = [['sunny','hot','high','weak'],['sunny','hot','high','strong'],['overcast','hot','high','weak'],
-                ['rain','mild','high','weak'],['rain','cool','normal','weak'],['rain','cool','normal','strong'],
-                ['overcast','cool','normal','strong'],['sunny','mild','high','weak'],['sunny','cool','normal','weak'],
-                ['rain','mild','normal','weak'],['sunny','mild','normal','strong'],['overcast','mild','high','strong'],
-                ['overcast','hot','normal','weak'],['rain','mild','high','strong']]
-        labels = ['no','no','yes','yes','yes','no','yes','no','yes','yes','yes','yes','yes','no']
-        names = ['outlook','temp','humidity','wind']
-        tree = build_tree(data, labels, list(range(4)))
-        print("Decision Tree (Play Tennis?):\n")
-        print_tree(tree, names=names)
-        print(f"\nPredict sunny/cool/normal/weak: {predict(tree, ['sunny','cool','normal','weak'])}")
-    else:
-        print("Usage: decision_tree.py --demo")
+def main():
+    p = argparse.ArgumentParser(description="Decision tree classifier")
+    p.add_argument("--demo", choices=["iris","xor"], default="iris")
+    p.add_argument("-d","--depth", type=int, default=5)
+    a = p.parse_args()
+    if a.demo == "xor":
+        data = [[0,0],[0,1],[1,0],[1,1]]; labels = [0,1,1,0]
+    else:  # simple iris-like
+        import random; random.seed(42)
+        data = []; labels = []
+        for _ in range(50): data.append([random.gauss(5,0.5),random.gauss(3.5,0.3)]); labels.append("setosa")
+        for _ in range(50): data.append([random.gauss(6,0.5),random.gauss(2.8,0.3)]); labels.append("versicolor")
+        for _ in range(50): data.append([random.gauss(7,0.5),random.gauss(3.2,0.3)]); labels.append("virginica")
+    tree = build_tree(data, labels, max_depth=a.depth)
+    print("Tree:"); print_tree(tree)
+    correct = sum(predict(tree,row)==label for row,label in zip(data,labels))
+    print(f"\nAccuracy: {correct}/{len(data)} ({100*correct/len(data):.1f}%)")
+
+if __name__ == "__main__": main()

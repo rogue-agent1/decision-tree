@@ -1,6 +1,11 @@
 # decision-tree
-Decision tree classifier from scratch (ID3 algorithm). Zero dependencies.
+
+Decision tree classifier from scratch
+
 ## Usage
+
 ```bash
-python3 decision_tree.py --demo
+python3 decision_tree.py --help
 ```
+
+Zero dependencies. Python 3.8+.
