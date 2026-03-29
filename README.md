@@ -1,11 +1,11 @@
 # decision_tree
 
-decision_tree - ID3/CART decision tree with Gini and entropy splitting.
+decision_tree: Decision tree classifier (ID3/entropy-based).
 
-Zero-dependency, single-file Python CLI.
+Single-file, zero-dependency Python CLI.
 
 ## Usage
 
 ```bash
-python3 decision_tree.py
+python3 decision_tree.py test
 ```
