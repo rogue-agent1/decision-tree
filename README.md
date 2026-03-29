@@ -1,6 +1,6 @@
-# decision-tree
+# Decision Tree Classifier
 
-Simple decision tree classifier
+Decision Tree Classifier — zero-dependency, single-file Python CLI.
 
 ## Usage
 
@@ -8,7 +8,6 @@ Simple decision tree classifier
 python3 decision_tree.py --help
 ```
 
-## Features
+## License
 
-- Zero dependencies (Python 3.8+)
-- Single file implementation
+MIT
