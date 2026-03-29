@@ -1,53 +1,47 @@
 #!/usr/bin/env python3
-"""Decision tree classifier (ID3/CART)."""
-import math
+"""decision_tree - Decision tree classifier."""
+import sys,argparse,json,math,random
 from collections import Counter
 def entropy(labels):
-    n=len(labels);counts=Counter(labels)
-    return -sum(c/n*math.log2(c/n) for c in counts.values() if c>0)
-def gini(labels):
-    n=len(labels);counts=Counter(labels)
-    return 1-sum((c/n)**2 for c in counts.values())
-def info_gain(data,labels,feature_idx,criterion="entropy"):
-    fn=entropy if criterion=="entropy" else gini
-    parent=fn(labels);n=len(data)
-    values=set(row[feature_idx] for row in data)
-    child=0
-    for v in values:
-        subset=[labels[i] for i in range(n) if data[i][feature_idx]==v]
-        child+=len(subset)/n*fn(subset)
-    return parent-child
-class DecisionTree:
-    def __init__(self,max_depth=10,criterion="entropy"):
-        self.max_depth=max_depth;self.criterion=criterion;self.tree=None
-    def fit(self,data,labels):
-        features=list(range(len(data[0])))
-        self.tree=self._build(data,labels,features,0)
-    def _build(self,data,labels,features,depth):
-        if len(set(labels))==1: return {"leaf":True,"label":labels[0]}
-        if depth>=self.max_depth or not features: return {"leaf":True,"label":Counter(labels).most_common(1)[0][0]}
-        gains=[(info_gain(data,labels,f,self.criterion),f) for f in features]
-        best_gain,best_f=max(gains)
-        if best_gain<=0: return {"leaf":True,"label":Counter(labels).most_common(1)[0][0]}
-        values=set(row[best_f] for row in data)
-        children={}
-        for v in values:
-            idx=[i for i in range(len(data)) if data[i][best_f]==v]
-            sub_data=[data[i] for i in idx];sub_labels=[labels[i] for i in idx]
-            remaining=[f for f in features if f!=best_f]
-            children[v]=self._build(sub_data,sub_labels,remaining,depth+1)
-        return {"leaf":False,"feature":best_f,"children":children,"default":Counter(labels).most_common(1)[0][0]}
-    def predict(self,row):
-        node=self.tree
-        while not node["leaf"]:
-            val=row[node["feature"]]
-            if val in node["children"]: node=node["children"][val]
-            else: return node["default"]
-        return node["label"]
-if __name__=="__main__":
-    data=[[0,0],[0,1],[1,0],[1,1],[0,0],[0,1],[1,0],[1,1]]
-    labels=[0,1,1,0,0,1,1,0]
-    dt=DecisionTree();dt.fit(data,labels)
-    correct=sum(1 for x,y in zip(data,labels) if dt.predict(x)==y)
-    print(f"Accuracy: {correct}/{len(data)}")
-    print("Decision tree OK")
+    n=len(labels);freq=Counter(labels)
+    return -sum((c/n)*math.log2(c/n) for c in freq.values() if c>0)
+def best_split(X,y,features):
+    best_gain=-1;best_feat=0;best_val=0
+    base_ent=entropy(y)
+    for f in features:
+        vals=sorted(set(row[f] for row in X))
+        for v in vals:
+            left_y=[yi for xi,yi in zip(X,y) if xi[f]<=v]
+            right_y=[yi for xi,yi in zip(X,y) if xi[f]>v]
+            if not left_y or not right_y:continue
+            gain=base_ent-(len(left_y)/len(y)*entropy(left_y)+len(right_y)/len(y)*entropy(right_y))
+            if gain>best_gain:best_gain=gain;best_feat=f;best_val=v
+    return best_feat,best_val,best_gain
+def build_tree(X,y,depth=0,max_depth=5):
+    if depth>=max_depth or len(set(y))==1:return Counter(y).most_common(1)[0][0]
+    feat,val,gain=best_split(X,y,range(len(X[0])))
+    if gain<=0:return Counter(y).most_common(1)[0][0]
+    left_X,left_y,right_X,right_y=[],[],[],[]
+    for xi,yi in zip(X,y):
+        if xi[feat]<=val:left_X.append(xi);left_y.append(yi)
+        else:right_X.append(xi);right_y.append(yi)
+    return {"feature":feat,"threshold":round(val,3),"left":build_tree(left_X,left_y,depth+1,max_depth),"right":build_tree(right_X,right_y,depth+1,max_depth)}
+def predict(tree,x):
+    if not isinstance(tree,dict):return tree
+    if x[tree["feature"]]<=tree["threshold"]:return predict(tree["left"],x)
+    return predict(tree["right"],x)
+def main():
+    p=argparse.ArgumentParser(description="Decision tree")
+    p.add_argument("--max-depth",type=int,default=5);p.add_argument("--samples",type=int,default=100)
+    args=p.parse_args()
+    random.seed(42)
+    X=[];y=[]
+    for _ in range(args.samples//2):
+        X.append([random.gauss(2,1),random.gauss(2,1)]);y.append("A")
+        X.append([random.gauss(5,1),random.gauss(5,1)]);y.append("B")
+    split=int(len(X)*0.8)
+    tree=build_tree(X[:split],y[:split],max_depth=args.max_depth)
+    correct=sum(1 for xi,yi in zip(X[split:],y[split:]) if predict(tree,xi)==yi)
+    acc=correct/len(X[split:]) if len(X)>split else 0
+    print(json.dumps({"tree":tree,"accuracy":round(acc,4),"test_size":len(X)-split},indent=2))
+if __name__=="__main__":main()
